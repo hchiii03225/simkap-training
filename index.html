@@ -1,0 +1,572 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SIMKAP Multi-Tasking Training (Ultimate + Analytics)</title>
+<style>
+    body { font-family: 'Arial', sans-serif; background-color: #f4f4f4; margin: 0; padding: 20px; display: flex; flex-direction: column; align-items: center; }
+    
+    #settings-panel { width: 810px; background: #e9ecef; padding: 15px 20px; border-radius: 8px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; border: 1px solid #ccc; }
+    .setting-group { display: flex; align-items: center; gap: 10px; font-weight: bold; color: #333; }
+    input[type=range] { cursor: pointer; }
+    .val-display { background: #fff; padding: 2px 8px; border-radius: 4px; border: 1px solid #999; min-width: 40px; text-align: center; }
+
+    #header { width: 850px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+    .btn-group { display: flex; gap: 10px; }
+    #timer { font-size: 32px; font-weight: bold; background: #000; color: #0f0; padding: 10px 20px; border-radius: 5px; }
+    
+    #main-container, #answer-section-container { display: flex; width: 850px; justify-content: space-between; }
+    #main-container { gap: 20px; margin-bottom: 20px; }
+    .grid-panel { background: white; padding: 15px; border: 2px solid #ccc; width: 320px; display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; text-align: center; font-family: monospace; font-size: 16px; }
+    .number-item { padding: 5px; cursor: default; user-select: none; }
+    .clickable:hover { background: #e0e0e0; cursor: pointer; }
+    .crossed { text-decoration: line-through; color: #999; }
+    .target-crossed { text-decoration: line-through; color: #d9534f; font-weight: bold; }
+    
+    #controls { display: flex; flex-direction: column; gap: 15px; width: 140px; }
+    button { padding: 10px; font-size: 16px; cursor: pointer; background: #333; color: white; border: none; border-radius: 5px; font-weight: bold; }
+    button:hover { background: #555; }
+    
+    #answer-section-container { background: #fff8dc; padding: 15px; border: 1px solid #ccc; border-radius: 5px; flex-direction: column; box-sizing: border-box; }
+    .answer-title { margin-bottom: 10px; font-weight: bold; color: #333; display: flex; justify-content: space-between; }
+    #answer-grid { display: grid; grid-template-columns: repeat(8, 1fr); gap: 10px; }
+    .answer-btn { background: #fff; color: #333; border: 1px solid #999; padding: 10px 5px; font-size: 14px; text-align: center; word-wrap: break-word; }
+    .answer-btn:hover { background: #e9ecef; }
+    
+    .modal { display: none; position: fixed; top: 10%; left: 50%; transform: translateX(-50%); background: white; padding: 20px; border: 3px solid #333; box-shadow: 0 5px 15px rgba(0,0,0,0.3); z-index: 100; width: 450px; }
+    .modal h3 { margin-top: 0; }
+    .close-btn { background: red; color: white; padding: 5px 10px; float: right; cursor: pointer; border: none; }
+
+    #result-screen { display: none; width: 850px; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.2); text-align: center; box-sizing: border-box; }
+    .result-columns { display: flex; justify-content: space-around; margin-bottom: 20px; }
+    .result-stat { font-size: 20px; margin: 10px 0; }
+    .highlight-green { color: #28a745; font-weight: bold; }
+    .highlight-red { color: #dc3545; font-weight: bold; }
+    
+    /* Chart Section */
+    #chart-container { margin-top: 30px; padding-top: 20px; border-top: 2px solid #eee; }
+    canvas { background: #f8f9fa; border: 1px solid #ccc; border-radius: 5px; }
+</style>
+</head>
+<body>
+
+<div id="settings-panel">
+    <div class="setting-group">
+        <label for="interval-slider">Question Interval:</label>
+        <input type="range" id="interval-slider" min="20" max="60" value="35" step="1" oninput="updateSettingsDisplay()">
+        <span class="val-display" id="interval-val">35s</span>
+    </div>
+    <div class="setting-group">
+        <label for="speed-slider">Voice Speed:</label>
+        <input type="range" id="speed-slider" min="0.6" max="1.5" value="0.9" step="0.1" oninput="updateSettingsDisplay()">
+        <span class="val-display" id="speed-val">0.9x</span>
+    </div>
+    <button onclick="clearHistory()" style="background: #dc3545; padding: 5px 10px; font-size: 14px;">Clear History</button>
+</div>
+
+<div id="header">
+    <div class="btn-group">
+        <button id="start-btn" onclick="startTest()" style="background: #28a745; font-size: 20px; padding: 10px 30px;">Start Test</button>
+        <button id="pause-btn" onclick="togglePause()" style="display: none; background: #ffc107; color: black; font-size: 20px; padding: 10px 30px;">Pause</button>
+    </div>
+    <div id="timer">00:00</div>
+</div>
+
+<div id="main-container">
+    <div class="grid-panel" id="left-grid"></div>
+    <div class="grid-panel" id="right-grid"></div>
+    
+    <div id="controls">
+        <button onclick="evaluateAndNext()" style="background: #007bff; height: 60px;">NEXT</button>
+        <hr style="width: 100%; border: 1px solid #ccc;">
+        <button onclick="toggleModal('schedule-modal')">Schedule</button>
+        <button onclick="toggleModal('directory-modal')">Directory</button>
+    </div>
+</div>
+
+<div id="answer-section-container">
+    <div class="answer-title">
+        <span>Answer Box (Refreshes every 3 questions)</span>
+        <span id="q-counter" style="color: #666; font-size: 14px;">Questions Asked: 0</span>
+    </div>
+    <div id="answer-grid"></div>
+</div>
+
+<div id="schedule-modal" class="modal">
+    <button class="close-btn" onclick="toggleModal('schedule-modal')">X</button>
+    <h3>Weekly Schedule</h3>
+    <div id="schedule-content"></div>
+</div>
+<div id="directory-modal" class="modal">
+    <button class="close-btn" onclick="toggleModal('directory-modal')">X</button>
+    <h3>Phone Directory</h3>
+    <div id="directory-content"></div>
+</div>
+
+<div id="result-screen">
+    <h1>Test Complete!</h1>
+    <div class="result-columns">
+        <div>
+            <h2>Grid Task (Crossing)</h2>
+            <div class="result-stat">Total Targets: <span id="res-total-targets">0</span></div>
+            <div class="result-stat">Correct: <span id="res-correct-cross" class="highlight-green">0</span></div>
+            <div class="result-stat">Missed: <span id="res-missed-cross" class="highlight-red">0</span></div>
+            <div class="result-stat">Wrong (Distractors): <span id="res-wrong-cross" class="highlight-red">0</span></div>
+        </div>
+        <div>
+            <h2>Audio Task (Multi-tasking)</h2>
+            <div class="result-stat">Questions Asked: <span id="res-audio-total">0</span></div>
+            <div class="result-stat">Correctly Answered: <span id="res-audio-correct" class="highlight-green">0</span></div>
+            <div class="result-stat">Accuracy: <span id="res-audio-accuracy" class="highlight-green">0</span>%</div>
+        </div>
+    </div>
+    
+    <div id="chart-container">
+        <h3>Performance Progress (Total Correct Crossed)</h3>
+        <canvas id="progressChart" width="700" height="200"></canvas>
+    </div>
+
+    <button onclick="location.reload()" style="margin-top: 20px; background: #007bff; font-size: 20px; padding: 10px 30px;">Restart Test</button>
+</div>
+
+<script>
+    function updateSettingsDisplay() {
+        document.getElementById('interval-val').innerText = document.getElementById('interval-slider').value + 's';
+        document.getElementById('speed-val').innerText = document.getElementById('speed-slider').value + 'x';
+    }
+
+    // === DATA CONFIGURATION AREA ===
+    const scheduleData = [
+        "<strong>Mon:</strong> 08:00 Team Meeting | 12:00 Lunch with John | 15:00 Flight Sim | 19:00 Gym",
+        "<strong>Tue:</strong> 09:00 Medical Check | 12:30 Lunch at Bella Roma | 14:00 Free Slot | 18:00 Dinner with Boss",
+        "<strong>Wed:</strong> 08:30 Briefing | 11:00 Review | 13:00 Lunch on Main Street | 16:00 Training",
+        "<strong>Thu:</strong> 09:00 Simulator | 12:00 Lunch with Sarah | 15:00 HR Meeting | 20:00 Night Flight",
+        "<strong>Fri:</strong> 08:00 Route Planning | 10:00 Free Slot | 13:00 Team Lunch | 17:00 Weekly Report"
+    ];
+
+    const directoryData = [
+        "<strong>Anderson, John:</strong> 2132-2700 (New York, NY)", "<strong>Smith, Sarah:</strong> 2132-2560 (Austin, TX)",
+        "<strong>Williams, David:</strong> 2132-8888 (Los Angeles, CA)", "<strong>Taylor, Emma:</strong> 2132-1111 (Miami, FL)",
+        "<strong>Brown, Michael:</strong> 2132-3456 (Chicago, IL)", "<strong>Davis, Jessica:</strong> 2132-7890 (Seattle, WA)",
+        "<strong>Miller, James:</strong> 2132-4321 (Boston, MA)", "<strong>Wilson, Linda:</strong> 2132-6543 (Denver, CO)",
+        "<strong>Moore, Robert:</strong> 2132-9876 (Atlanta, GA)", "<strong>Taylor, William:</strong> 2132-2468 (Phoenix, AZ)",
+        "<strong>Anderson, Mary:</strong> 2132-1357 (Portland, OR)", "<strong>Jackson, Richard:</strong> 2132-1122 (Detroit, MI)",
+        "<strong>White, Patricia:</strong> 2132-3344 (Dallas, TX)", "<strong>Harris, Charles:</strong> 2132-5566 (Las Vegas, NV)",
+        "<strong>Martin, Susan:</strong> 2132-7788 (San Diego, CA)"
+    ];
+
+    // Master Task Pool (Expanded & Balanced)
+    const masterTaskPool = [
+        // Math
+        { q: "Math: Eight plus thirty minus fifteen.", a: "23" }, { q: "Math: Twenty-four multiplied by three.", a: "72" },
+        { q: "Math: Fifty divided by two, plus fifteen.", a: "40" }, { q: "Math: One hundred minus forty-five minus twenty.", a: "35" },
+        { q: "Math: Twelve multiplied by four, plus two.", a: "50" }, { q: "Math: Thirty-five plus forty-eight.", a: "83" },
+        { q: "Math: Six times fifteen, minus twenty.", a: "70" }, { q: "Math: Fourteen times five, minus ten.", a: "60" },
+        { q: "Math: Seventy-two divided by eight, times four.", a: "36" }, { q: "Math: Nineteen plus twenty-one, multiplied by two.", a: "80" },
+        { q: "Math: Ninety minus thirty-five.", a: "55" }, { q: "Math: Eight times eight, minus four.", a: "60" },
+        // Directory
+        { q: "Directory check: What is the phone number of John Anderson?", a: "2132-2700" }, { q: "Directory check: What is the phone number of Emma Taylor?", a: "2132-1111" },
+        { q: "Directory check: What is the phone number of Charles Harris?", a: "2132-5566" }, { q: "Directory check: What is the phone number of James Miller?", a: "2132-4321" },
+        { q: "Directory check: Which city does Sarah Smith live in?", a: "Austin" }, { q: "Directory check: What state is David Williams in?", a: "California" },
+        { q: "Directory check: Which city does Mary Anderson live in?", a: "Portland" }, { q: "Directory check: What state is Linda Wilson in?", a: "Colorado" },
+        { q: "Directory check: Which city does Jessica Davis live in?", a: "Seattle" }, { q: "Directory check: Where does Robert Moore live?", a: "Atlanta" },
+        // Schedule
+        { q: "Schedule check: On which day do you have a free slot at 14:00?", a: "Tuesday" }, { q: "Schedule check: What time is your free slot on Friday?", a: "10:00" },
+        { q: "Schedule check: Who are you having lunch with on Monday?", a: "John" }, { q: "Schedule check: What time is the flight sim on Monday?", a: "15:00" },
+        { q: "Schedule check: What street is Wednesday's lunch on?", a: "Main Street" }, { q: "Schedule check: What restaurant is Tuesday's lunch at?", a: "Bella Roma" },
+        { q: "Schedule check: Who are you having dinner with on Tuesday?", a: "Boss" }, { q: "Schedule check: What is scheduled for Thursday at 20:00?", a: "Night Flight" },
+        { q: "Schedule check: What time is the medical check on Tuesday?", a: "09:00" }, { q: "Schedule check: Who are you having lunch with on Thursday?", a: "Sarah" },
+        // Odd one out
+        { q: "Odd one out: swimming, running, sitting, jogging.", a: "sitting" }, { q: "Odd one out: apple, banana, carrot, grape.", a: "carrot" },
+        { q: "Odd one out: car, truck, bus, bicycle.", a: "bicycle" }, { q: "Odd one out: red, blue, circle, green.", a: "circle" },
+        { q: "Odd one out: table, chair, sofa, window.", a: "window" }, { q: "Odd one out: dog, cat, hamster, tiger.", a: "tiger" },
+        { q: "Odd one out: guitar, violin, cello, drum.", a: "drum" }, { q: "Odd one out: water, juice, milk, bread.", a: "bread" },
+        { q: "Odd one out: winter, summer, spring, monday.", a: "monday" }, { q: "Odd one out: eye, ear, nose, hand.", a: "hand" },
+        // Analogies
+        { q: "Analogies: Foot is to sock, as hand is to what?", a: "glove" }, { q: "Analogies: Bird is to fly, as fish is to what?", a: "swim" },
+        { q: "Analogies: Sun is to day, as moon is to what?", a: "night" }, { q: "Analogies: Ice is to cold, as fire is to what?", a: "hot" },
+        { q: "Analogies: Book is to read, as song is to what?", a: "listen" }, { q: "Analogies: Car is to road, as train is to what?", a: "track" },
+        { q: "Analogies: Happy is to smile, as sad is to what?", a: "cry" }, { q: "Analogies: Clock is to time, as thermometer is to what?", a: "temperature" },
+        { q: "Analogies: Up is to down, as left is to what?", a: "right" }, { q: "Analogies: Teacher is to school, as doctor is to what?", a: "hospital" },
+        // Sequence
+        { q: "Sequence: 2, 4, 8, 16. What is the next number?", a: "32" }, { q: "Sequence: 10, 20, 30, 40. What is the next number?", a: "50" },
+        { q: "Sequence: 100, 90, 80, 70. What is the next number?", a: "60" }, { q: "Sequence: 1, 3, 5, 7. What is the next number?", a: "9" },
+        { q: "Sequence: 3, 6, 9, 12. What is the next number?", a: "15" }, { q: "Sequence: 5, 10, 20, 40. What is the next number?", a: "80" },
+        { q: "Sequence: 1, 4, 9, 16. What is the next number?", a: "25" }, { q: "Sequence: 10, 5, 0, minus 5. What is the next number?", a: "-10" },
+        { q: "Sequence: 2, 5, 8, 11. What is the next number?", a: "14" }, { q: "Sequence: 128, 64, 32, 16. What is the next number?", a: "8" },
+        // Logic
+        { q: "Logic: Alex is older than Sam. Sam and Peter are the same age. Who is the oldest?", a: "Alex" },
+        { q: "Logic: Tom is taller than Jerry. Jerry is taller than Spike. Who is the shortest?", a: "Spike" },
+        { q: "Logic: Box A is heavier than Box B. Box B is heavier than Box C. Which is the lightest?", a: "Box C" },
+        { q: "Logic: Train X is faster than Train Y. Train Z is the same speed as Train Y. Which is the fastest?", a: "Train X" },
+        { q: "Logic: Mary scores higher than Jane. Jane scores lower than Lucy. Who is the lowest?", a: "Jane" },
+        { q: "Logic: Tree A is shorter than Tree B. Tree B is the same height as Tree C. Which is the shortest?", a: "Tree A" },
+        { q: "Logic: Red car is more expensive than Blue car. Blue car is more expensive than Green car. Which is the cheapest?", a: "Green car" },
+        { q: "Logic: Building 1 has more floors than Building 2. Building 3 has fewer floors than Building 2. Which has the most floors?", a: "Building 1" },
+        { q: "Logic: River A is longer than River B. River A is shorter than River C. Which is the longest?", a: "River C" },
+        { q: "Logic: Alice is faster than Bob. Bob and Charlie are equally fast. Who is the fastest?", a: "Alice" }
+    ];
+
+    // 魔王級前瞻記憶題庫 (需要轉換邏輯，不是直接聽寫)
+    const prospectiveTaskPool = [
+        { voice: "click the opposite of hot", a: "cold" },
+        { voice: "click the number of days in a week", a: "7" },
+        { voice: "click the shape with three sides", a: "triangle" },
+        { voice: "click the color of the clear sky", a: "blue" },
+        { voice: "click the capital city of Japan", a: "Tokyo" },
+        { voice: "click the result of ten divided by two", a: "5" },
+        { voice: "click the animal that meows", a: "cat" },
+        { voice: "click the day after Monday", a: "Tuesday" },
+        { voice: "click the opposite of down", a: "up" },
+        { voice: "click the month after December", a: "January" }
+    ];
+
+    // All possible answers for dynamic rendering
+    const allPossibleAnswers = [
+        "23", "72", "40", "35", "50", "83", "70", "60", "36", "80", "55",
+        "2132-2700", "2132-1111", "2132-5566", "2132-4321", "2132-7788", "Austin", "California", "Portland", "Colorado", "Seattle", "Atlanta",
+        "Tuesday", "10:00", "John", "15:00", "Main Street", "Bella Roma", "Boss", "Night Flight", "09:00", "Sarah",
+        "sitting", "carrot", "bicycle", "circle", "window", "tiger", "drum", "bread", "monday", "hand",
+        "glove", "swim", "night", "hot", "listen", "track", "cry", "temperature", "right", "hospital",
+        "32", "9", "15", "25", "-10", "14", "8",
+        "Alex", "Spike", "Box C", "Train X", "Jane", "Tree A", "Green car", "Building 1", "River C", "Alice",
+        "cold", "7", "triangle", "blue", "Tokyo", "5", "cat", "up", "January"
+    ];
+
+    let timerInterval, audioTaskInterval;
+    let secondsElapsed = 0;
+    let testRunning = false, isPaused = false;
+    
+    let stats = { targetsGenerated: 0, correctCrossed: 0, wrongCrossed: 0, missedTargets: 0, audioAsked: 0, audioCorrect: 0 };
+    let currentExpectedAnswer = null;
+    
+    // 不重複抽題機制變數
+    let activeTaskDeck = []; 
+    let upcomingTasks = []; 
+    let activeProspectiveTasks = [];
+
+    document.getElementById('schedule-content').innerHTML = scheduleData.map(d => `<p>${d}</p>`).join('');
+    document.getElementById('directory-content').innerHTML = directoryData.map(d => `<p>${d}</p>`).join('');
+
+    function startTest() {
+        if (testRunning) return;
+        testRunning = true;
+        document.getElementById('start-btn').style.display = 'none';
+        document.getElementById('pause-btn').style.display = 'block';
+        
+        document.getElementById('interval-slider').disabled = true;
+        document.getElementById('speed-slider').disabled = true;
+
+        // 1. 初始化不重複的題庫牌堆
+        activeTaskDeck = [...masterTaskPool].sort(() => 0.5 - Math.random());
+
+        // 2. 隨機生成 3 題魔王前瞻記憶任務 (在 1m10s, 3m, 5m 附近觸發)
+        let pPool = [...prospectiveTaskPool].sort(() => 0.5 - Math.random());
+        activeProspectiveTasks = [
+            { announceTime: 40, targetTime: 70, window: 10, voice: `Attention. At exactly one minute and ten seconds, ${pPool[0].voice}.`, a: pPool[0].a },
+            { announceTime: 150, targetTime: 180, window: 10, voice: `Attention. At exactly three minutes, ${pPool[1].voice}.`, a: pPool[1].a },
+            { announceTime: 270, targetTime: 300, window: 10, voice: `Attention. At exactly five minutes, ${pPool[2].voice}.`, a: pPool[2].a }
+        ];
+
+        refreshAnswerBox(); 
+        generateGrids();
+        resumeTimers();
+    }
+
+    function togglePause() {
+        if (!testRunning) return;
+        isPaused = !isPaused;
+        const pauseBtn = document.getElementById('pause-btn');
+        if (isPaused) {
+            pauseBtn.innerText = "Resume"; pauseBtn.style.background = "#17a2b8";
+            clearInterval(timerInterval); clearTimeout(audioTaskInterval);
+            window.speechSynthesis.cancel();
+        } else {
+            pauseBtn.innerText = "Pause"; pauseBtn.style.background = "#ffc107";
+            resumeTimers();
+        }
+    }
+
+    function resumeTimers() {
+        timerInterval = setInterval(() => {
+            secondsElapsed++;
+            let mins = Math.floor(secondsElapsed / 60); let secs = secondsElapsed % 60;
+            document.getElementById('timer').innerText = `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+            
+            let pTaskAnnounce = activeProspectiveTasks.find(t => t.announceTime === secondsElapsed);
+            if (pTaskAnnounce) { 
+                speak(pTaskAnnounce.voice); 
+                stats.audioAsked++;
+                document.getElementById('q-counter').innerText = `Questions Asked: ${stats.audioAsked}`;
+            }
+
+            if (secondsElapsed >= 360) {
+                clearInterval(timerInterval); clearTimeout(audioTaskInterval);
+                evaluateGrid(true); 
+                showResults();
+            }
+        }, 1000);
+        scheduleNextTask();
+    }
+
+    function refreshAnswerBox() {
+        upcomingTasks = [];
+        let guaranteedAnswers = new Set();
+
+        // 從不重複的牌堆中抽出 3 題
+        for(let i=0; i<3; i++) {
+            if(activeTaskDeck.length === 0) activeTaskDeck = [...masterTaskPool].sort(() => 0.5 - Math.random());
+            let drawnTask = activeTaskDeck.pop();
+            upcomingTasks.push(drawnTask);
+            guaranteedAnswers.add(drawnTask.a);
+        }
+
+        let upcomingPTasks = activeProspectiveTasks.filter(t => t.targetTime > secondsElapsed && t.targetTime <= secondsElapsed + 120);
+        upcomingPTasks.forEach(t => guaranteedAnswers.add(t.a));
+
+        let displayOptions = Array.from(guaranteedAnswers);
+        let poolCopy = [...allPossibleAnswers].sort(() => 0.5 - Math.random());
+        for (let ans of poolCopy) {
+            if (displayOptions.length >= 16) break;
+            if (!displayOptions.includes(ans)) {
+                displayOptions.push(ans);
+            }
+        }
+
+        displayOptions.sort(() => 0.5 - Math.random());
+        const answerGrid = document.getElementById('answer-grid');
+        answerGrid.innerHTML = '';
+        displayOptions.forEach(opt => {
+            let btn = document.createElement('button');
+            btn.className = 'answer-btn'; btn.innerText = opt;
+            btn.onclick = () => checkAnswer(btn, opt);
+            answerGrid.appendChild(btn);
+        });
+    }
+
+    function scheduleNextTask() {
+        if (isPaused) return;
+        
+        let baseInterval = parseInt(document.getElementById('interval-slider').value) * 1000;
+        let randomOffset = (Math.random() * 4000) - 2000; 
+        let nextInterval = baseInterval + randomOffset;
+        
+        audioTaskInterval = setTimeout(() => {
+            if (isPaused) return;
+
+            if (upcomingTasks.length === 0) { refreshAnswerBox(); }
+
+            let taskToAsk = upcomingTasks.shift(); 
+            currentExpectedAnswer = taskToAsk.a; 
+            
+            stats.audioAsked++;
+            document.getElementById('q-counter').innerText = `Questions Asked: ${stats.audioAsked}`;
+            
+            speak("Listen. " + taskToAsk.q);
+
+            scheduleNextTask();
+        }, nextInterval);
+    }
+
+    function speak(text) {
+        let utterance = new SpeechSynthesisUtterance(text);
+        utterance.lang = 'en-US'; 
+        utterance.rate = parseFloat(document.getElementById('speed-slider').value); 
+        window.speechSynthesis.speak(utterance);
+    }
+
+    function checkAnswer(btnElement, selectedAnswer) {
+        let isCorrect = false;
+        let activePTask = activeProspectiveTasks.find(t => secondsElapsed >= t.targetTime && secondsElapsed <= (t.targetTime + t.window));
+        
+        if (activePTask && selectedAnswer === activePTask.a) {
+            isCorrect = true; stats.audioCorrect++; activePTask.targetTime = -1;
+        } else if (currentExpectedAnswer && selectedAnswer === currentExpectedAnswer) {
+            isCorrect = true; stats.audioCorrect++; currentExpectedAnswer = null;
+        }
+
+        if (isCorrect) {
+            btnElement.style.background = "#28a745"; btnElement.style.color = "white";
+        } else {
+            btnElement.style.background = "#dc3545"; btnElement.style.color = "white";
+        }
+        setTimeout(() => { btnElement.style.background = "#fff"; btnElement.style.color = "#333"; }, 800);
+    }
+
+    function evaluateAndNext() { evaluateGrid(false); generateGrids(); }
+
+    function evaluateGrid(isTimeout = false) {
+        let rightItems = document.querySelectorAll('#right-grid .number-item');
+        if (rightItems.length === 0) return;
+
+        rightItems.forEach(item => {
+            let isCrossed = item.classList.contains('crossed');
+            let isTarget = item.dataset.isTarget === "true";
+
+            if (isCrossed && isTarget) { 
+                stats.correctCrossed++; 
+            } else if (isCrossed && !isTarget) { 
+                stats.wrongCrossed++; 
+            } else if (!isCrossed && isTarget) { 
+                if (isTimeout) { stats.targetsGenerated--; } 
+                else { stats.missedTargets++; }
+            }
+        });
+    }
+
+    function generateGrids() {
+        const leftGrid = document.getElementById('left-grid');
+        const rightGrid = document.getElementById('right-grid');
+        leftGrid.innerHTML = ''; rightGrid.innerHTML = '';
+
+        for (let row = 0; row < 10; row++) {
+            let prefix = Math.floor(10 + Math.random() * 90).toString();
+            let leftNumbers = [];
+            while (leftNumbers.length < 5) {
+                let num = prefix + Math.floor(10 + Math.random() * 90).toString();
+                if (!leftNumbers.includes(num)) leftNumbers.push(num);
+            }
+            
+            let numTargetsLeft = Math.floor(Math.random() * 2) + 2; 
+            let targets = [...leftNumbers].sort(() => 0.5 - Math.random()).slice(0, numTargetsLeft);
+
+            leftNumbers.forEach(num => {
+                let span = document.createElement('div');
+                span.className = 'number-item'; span.innerText = num;
+                if (targets.includes(num)) span.classList.add('target-crossed');
+                leftGrid.appendChild(span);
+            });
+
+            let rightNumbers = [];
+            let numTargetsRight = Math.floor(Math.random() * 3) + 2; 
+            for(let i=0; i<numTargetsRight; i++) {
+                let randomTarget = targets[Math.floor(Math.random() * targets.length)];
+                rightNumbers.push(randomTarget);
+                stats.targetsGenerated++;
+            }
+
+            while (rightNumbers.length < 5) {
+                let num = prefix + Math.floor(10 + Math.random() * 90).toString();
+                if (!targets.includes(num)) { rightNumbers.push(num); }
+            }
+            rightNumbers.sort(() => 0.5 - Math.random());
+
+            rightNumbers.forEach(num => {
+                let span = document.createElement('div');
+                span.className = 'number-item clickable';
+                span.innerText = num;
+                span.dataset.isTarget = targets.includes(num) ? "true" : "false";
+                span.onclick = function() { this.classList.toggle('crossed'); };
+                rightGrid.appendChild(span);
+            });
+        }
+    }
+
+    function toggleModal(modalId) {
+        const modal = document.getElementById(modalId);
+        if (modal.style.display === 'block') { modal.style.display = 'none'; } 
+        else {
+            document.getElementById('schedule-modal').style.display = 'none';
+            document.getElementById('directory-modal').style.display = 'none';
+            modal.style.display = 'block';
+        }
+    }
+
+    function showResults() {
+        document.getElementById('header').style.display = 'none'; document.getElementById('main-container').style.display = 'none';
+        document.getElementById('answer-section-container').style.display = 'none'; document.getElementById('result-screen').style.display = 'block';
+
+        document.getElementById('res-total-targets').innerText = stats.targetsGenerated;
+        document.getElementById('res-correct-cross').innerText = stats.correctCrossed;
+        document.getElementById('res-missed-cross').innerText = stats.missedTargets;
+        document.getElementById('res-wrong-cross').innerText = stats.wrongCrossed;
+        document.getElementById('res-audio-total').innerText = stats.audioAsked;
+        document.getElementById('res-audio-correct').innerText = stats.audioCorrect;
+        
+        let accuracy = stats.audioAsked > 0 ? Math.round((stats.audioCorrect / stats.audioAsked) * 100) : 0;
+        document.getElementById('res-audio-accuracy').innerText = accuracy; // Bug fixed: Removed trailing '%' in JS
+
+        saveAndDrawChart();
+    }
+
+    // === CHART & HISTORY LOGIC ===
+    function saveAndDrawChart() {
+        let history = JSON.parse(localStorage.getItem('simkapHistory')) || [];
+        
+        let record = {
+            date: new Date().toLocaleDateString(),
+            correctCrossed: stats.correctCrossed
+        };
+        history.push(record);
+        
+        // 限制最多保存 20 筆紀錄以免畫圖太擠
+        if(history.length > 20) history.shift();
+        
+        localStorage.setItem('simkapHistory', JSON.stringify(history));
+
+        drawChart(history);
+    }
+
+    function drawChart(history) {
+        const canvas = document.getElementById('progressChart');
+        if(!canvas) return;
+        const ctx = canvas.getContext('2d');
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        if(history.length < 2) {
+            ctx.font = "16px Arial"; ctx.fillStyle = "#666"; ctx.textAlign = "center";
+            ctx.fillText("Need at least 2 sessions to show progress chart. Keep going!", canvas.width/2, canvas.height/2);
+            return;
+        }
+
+        const padding = 40;
+        const width = canvas.width - padding * 2;
+        const height = canvas.height - padding * 2;
+
+        let maxVal = Math.max(...history.map(h => h.correctCrossed));
+        let minVal = Math.min(...history.map(h => h.correctCrossed));
+        if (maxVal === minVal) { maxVal += 10; minVal -= 10; }
+        
+        // 留點上下空間
+        maxVal = Math.ceil(maxVal * 1.1);
+        minVal = Math.floor(minVal * 0.9);
+
+        // 畫網格與底線
+        ctx.beginPath();
+        ctx.moveTo(padding, padding); ctx.lineTo(padding, canvas.height - padding);
+        ctx.lineTo(canvas.width - padding, canvas.height - padding);
+        ctx.strokeStyle = "#aaa"; ctx.lineWidth = 1; ctx.stroke();
+
+        // 畫折線
+        ctx.beginPath();
+        ctx.strokeStyle = "#007bff"; ctx.lineWidth = 3;
+        for(let i=0; i<history.length; i++) {
+            let x = padding + (i / (history.length - 1)) * width;
+            let y = canvas.height - padding - ((history[i].correctCrossed - minVal) / (maxVal - minVal)) * height;
+            if(i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+        }
+        ctx.stroke();
+
+        // 畫資料點與數字
+        for(let i=0; i<history.length; i++) {
+            let x = padding + (i / (history.length - 1)) * width;
+            let y = canvas.height - padding - ((history[i].correctCrossed - minVal) / (maxVal - minVal)) * height;
+            
+            ctx.beginPath(); ctx.arc(x, y, 5, 0, Math.PI*2);
+            ctx.fillStyle = "#28a745"; ctx.fill();
+
+            ctx.fillStyle = "#333"; ctx.font = "bold 14px Arial"; ctx.textAlign = "center";
+            ctx.fillText(history[i].correctCrossed, x, y - 12);
+        }
+    }
+
+    function clearHistory() {
+        if(confirm("Are you sure you want to clear your progress history?")) {
+            localStorage.removeItem('simkapHistory');
+            alert("History cleared! Please refresh the page or start a new test.");
+        }
+    }
+</script>
+</body>
+</html>
