@@ -251,6 +251,9 @@
 
     function startTest() {
         if (testRunning) return;
+	let wakeUp = new SpeechSynthesisUtterance("Test started.");
+        wakeUp.lang = 'en-US';
+        window.speechSynthesis.speak(wakeUp);
         testRunning = true;
         document.getElementById('start-btn').style.display = 'none';
         document.getElementById('pause-btn').style.display = 'block';
